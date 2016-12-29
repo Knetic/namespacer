@@ -127,7 +127,7 @@ func containsNamespace(path string, namespace string) (bool, int, error) {
 		}
 
 		// already got a namespace?
-		if strings.Contains(line, "namespace") {
+		if strings.HasPrefix(line, "namespace") {
 			return true, -1, nil
 		}
 
@@ -137,6 +137,10 @@ func containsNamespace(path string, namespace string) (bool, int, error) {
 		}
 
 		// alright, found something. Call it a day.
+		if desiredNamespaceLocation == -1 {
+			desiredNamespaceLocation = lineNumber-1
+		}
+
 		return false, desiredNamespaceLocation, nil
 	}
 
@@ -146,11 +150,19 @@ func containsNamespace(path string, namespace string) (bool, int, error) {
 func containsSignature(line string) bool {
 
 	return strings.Contains(line, "public class ") ||
+		strings.Contains(line, "public abstract class ") ||
+		strings.Contains(line, "public sealed class ") ||
 		strings.Contains(line, "public struct ") ||
 		strings.Contains(line, "public enum ") ||
+		strings.Contains(line, "public interface ") ||
+		strings.Contains(line, "public delegate ") ||
 		strings.Contains(line, "internal class ") ||
+		strings.Contains(line, "internal abstract class ") ||
+		strings.Contains(line, "internal sealed class ") ||
 		strings.Contains(line, "internal struct ") ||
-		strings.Contains(line, "internal enum ")
+		strings.Contains(line, "internal enum ") ||
+		strings.Contains(line, "internal interface ") ||
+		strings.Contains(line, "internal delegate  ")
 }
 
 /*
