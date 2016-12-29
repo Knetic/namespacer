@@ -5,6 +5,8 @@ import (
 	"strings"
 	"os"
 	"bufio"
+	"io"
+	"io/ioutil"
 	"path/filepath"
 )
 
@@ -55,7 +57,6 @@ func createWalker(settings RunSettings) func(path string, info os.FileInfo, err 
 func ensureNamespace(path string, namespace string) error {
 
 	var target, temp *os.File
-	var tempPath string
 	var err error
 	var lineNumber int
 	var hasNamespace bool
@@ -75,19 +76,21 @@ func ensureNamespace(path string, namespace string) error {
 	}
 	defer target.Close()
 
-	tempPath = os.TempDir() + "/out.cs"
-	temp, err = os.Create(tempPath)
+	temp, err = ioutil.TempFile(os.TempDir(), "namespacer")
 	if err != nil {
 		return err
 	}
 	defer temp.Close()
 
-	insertLine(target, temp, ("namespace " + namespace + "\n{\n"), lineNumber)
+	err = insertLine(target, temp, ("namespace " + namespace + "\n{\n"), lineNumber)
+	if err != nil {
+		return err
+	}
 
 	// move on over.
 	temp.Close()
 	target.Close()
-	return moveFile(tempPath, path)
+	return moveFile(temp.Name(), path)
 }
 
 // Returns true if the given file contains the given namespace.
@@ -169,11 +172,12 @@ func containsSignature(line string) bool {
 	copies all of [inFile] to [outFile], line by line.
 	except that on the given [lineNumber], the line will be the [desired] string.
 */
-func insertLine(inFile *os.File, outFile *os.File, desired string, lineNumber int) {
+func insertLine(inFile *os.File, outFile *os.File, desired string, lineNumber int) error {
 
 	var scanner *bufio.Scanner
 	var writer *bufio.Writer
 	var line string
+	var err error
 
 	scanner = bufio.NewScanner(inFile)
 	writer = bufio.NewWriter(outFile)
@@ -182,6 +186,11 @@ func insertLine(inFile *os.File, outFile *os.File, desired string, lineNumber in
 	for i := 0; i < lineNumber; i++ {
 
 		scanner.Scan()
+		err = scanner.Err()
+		if err != nil {
+			return err
+		}
+
 		writeLine(writer, scanner.Text())
 	}
 
@@ -194,6 +203,16 @@ func insertLine(inFile *os.File, outFile *os.File, desired string, lineNumber in
 		line = "\t" + scanner.Text()
 		writeLine(writer, line)
 	}
+
+	writeLine(writer, "}")
+
+	err = scanner.Err()
+	if err != nil {
+		return err
+	}
+
+	writer.Flush()
+	return nil
 }
 
 func moveFile(sourcePath string, targetPath string) error {
@@ -211,14 +230,13 @@ func moveFile(sourcePath string, targetPath string) error {
 		return err
 	}
 
-	return os.Remove(sourcePath)
+	return nil
+	//return os.Remove(sourcePath)
 }
 
 func copyFile(sourcePath string, targetPath string) error {
 
 	var source, target *os.File
-	var sourceBuf *bufio.Reader
-	var targetBuf *bufio.Writer
 	var err error
 
 	source, err = os.OpenFile(sourcePath, os.O_RDONLY, os.ModeAppend)
@@ -233,10 +251,7 @@ func copyFile(sourcePath string, targetPath string) error {
 	}
 	defer target.Close()
 
-	targetBuf = bufio.NewWriter(target)
-	sourceBuf = bufio.NewReader(source)
-
-	_, err = sourceBuf.WriteTo(targetBuf)
+	_, err = io.Copy(target, source)
 	if err != nil {
 		return err
 	}
